@@ -17,10 +17,11 @@ The UI is a React + TypeScript PWA-style client. Every security-sensitive action
 **Staff**
 
 - Dashboard for assigned messes and today's service
+- Weekly recurring menu: set each day × meal once and meals auto-generate for the next 3 weeks
 - Create, edit, and delete future meals and menus (past service is protected)
 - Student directory limited to assigned messes
 - Camera QR scanner plus roll-number fallback
-- Server-verified results: valid, already scanned, opted out, wrong mess, invalid token, not booked
+- Server-verified results: valid, already scanned, before/after service window, opted out, wrong mess, invalid token, not booked
 
 **Administrators**
 
@@ -195,6 +196,7 @@ Every import is processed by `admin_bulk_import_students`, which validates each 
 | --- | --- |
 | `npm run dev` | Start Vite on port 5173 |
 | `npm run build` | Type-check and build for production |
+| `npm run deploy` | Build and deploy `dist/` to Cloudflare Pages |
 | `npm run typecheck` | TypeScript project build check |
 | `npm run lint` | Oxlint |
 | `npm run db:reset` | Recreate the local database, migrations, and seed |
@@ -211,18 +213,21 @@ With the local stack running and demo auth seeded:
 npm run test:backend
 ```
 
-The suite exercises real Supabase clients and covers RLS isolation, cutoff enforcement, event history, token privacy, duplicate and concurrent scans, wrong-mess scans, manual verification, meal CRUD restrictions, transfers, deactivation, bulk import, reporting, and self-role-change prevention. It mutates the local database, so run `npm run db:reset && npm run seed:auth` afterwards if you want a clean demo state.
+The suite exercises real Supabase clients and covers RLS isolation, cutoff enforcement, event history, token privacy, service-window enforcement, duplicate and concurrent scans, wrong-mess scans, manual verification, meal CRUD restrictions, transfers, deactivation, bulk import, reporting, and self-role-change prevention. It mutates the local database, so run `npm run db:reset && npm run seed:auth` afterwards if you want a clean demo state.
 
 ## Database architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full explanation. In short:
 
 - `profiles` are provisioned by email before first sign-in; `auth_user_id` is linked by a trigger when the Google identity appears.
+- Staff define a repeating weekly menu; future meals and their bookings are generated automatically from it.
+- Editing a generated meal turns that date into a one-off override so the weekly plan does not overwrite it.
 - Bookings are generated automatically for future meals from each student's default preference.
 - Status changes are appended to `booking_events`; history is never rewritten.
 - QR tokens live in a separate `booking_tokens` table that staff cannot read directly.
 - Booking writes, scans, provisioning, imports, and reports are RPC-only. Direct writes to bookings, tokens, events, and scans are denied.
 - Scans lock the booking row, so concurrent duplicate scans produce exactly one valid result.
+- The database refuses scans outside the meal's service window, returning `not_started` or `meal_ended` with a human-readable message.
 
 ## Rebate calculation
 
@@ -256,13 +261,20 @@ Configure the Pages project with:
 
 Only public `VITE_` values belong in Pages. Do not add `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`, or `SUPABASE_DB_PASSWORD` there.
 
-Direct upload from a configured machine:
+First-time setup from a machine with the Wrangler CLI:
 
 ```bash
-npm run build
+npx wrangler login
 npx wrangler pages project create messmate --production-branch main
-npx wrangler pages deploy dist --project-name messmate --branch main
 ```
+
+After that, deploy with one command:
+
+```bash
+npm run deploy
+```
+
+`npm run deploy` runs the production build and uploads `dist/` to the `messmate` Pages project on the `main` production branch. To deploy to a different Pages project, update the `--project-name` value in the `deploy` script in `package.json`.
 
 Then update the hosted Supabase **Authentication → URL Configuration**:
 

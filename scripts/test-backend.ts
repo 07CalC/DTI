@@ -59,7 +59,7 @@ const service = createClient(url, serviceKey, {
 })
 
 const [admin, staffBH1, staffBH4, studentBH1] = await Promise.all([
-  signIn('admin@iiita.ac.in'),
+  signIn('iec2024076@iiita.ac.in'),
   signIn('rakesh.yadav@iiita.ac.in'),
   signIn('geeta.sharma@iiita.ac.in'),
   signIn('aarav.mehta@iiita.ac.in'),
@@ -73,6 +73,9 @@ const studentProfileId = context.data.profile.id
 const tomorrow = new Date(`${todayIST()}T12:00:00+05:30`)
 tomorrow.setDate(tomorrow.getDate() + 1)
 const tomorrowDate = tomorrow.toISOString().slice(0, 10)
+const yesterday = new Date(`${todayIST()}T12:00:00+05:30`)
+yesterday.setDate(yesterday.getDate() - 1)
+const yesterdayDate = yesterday.toISOString().slice(0, 10)
 const inThreeDays = new Date(tomorrow)
 inThreeDays.setDate(inThreeDays.getDate() + 2)
 const inThreeDaysDate = inThreeDays.toISOString().slice(0, 10)
@@ -251,16 +254,94 @@ await test('student cannot change their own role', async () => {
 })
 
 console.log('\nMeal passes + scanning')
-let validToken = ''
-let validBookingId = ''
+
+/**
+ * The scanner now rejects passes outside the meal service window. Make a
+ * seeded meal for today open for the whole day so scan tests do not depend on
+ * the wall-clock time when the suite runs. This helper is only used for
+ * today's meals, where the (mess, date, category) unique slot already exists.
+ */
+async function openTodayMeal(category: 'breakfast' | 'lunch' | 'snacks' | 'dinner') {
+  const { data: meal, error } = await service
+    .from('meals')
+    .select('id')
+    .eq('mess_id', BH1)
+    .eq('meal_date', todayIST())
+    .eq('category', category)
+    .single()
+  check(!error && meal, `expected today's ${category}: ${error?.message}`)
+
+  const { error: updateError } = await service
+    .from('meals')
+    .update({
+      start_time: '00:00:00',
+      end_time: '23:59:59',
+      booking_cutoff_at: new Date(`${todayIST()}T00:00:00+05:30`).toISOString(),
+    })
+    .eq('id', meal!.id)
+  check(!updateError, updateError?.message)
+
+  return meal!.id
+}
+
+async function ensureOptedInAndGetToken(mealId: string) {
+  const { data: booking, error } = await service
+    .from('meal_bookings')
+    .select('id,status,consumed_at')
+    .eq('meal_id', mealId)
+    .eq('student_id', student.id)
+    .single()
+  check(!error && booking, `expected booking for meal: ${error?.message}`)
+
+  // Seeded data may already contain a scan for this meal. Reset only this
+  // test booking so the scan tests start from a clean, opted-in state.
+  if (booking!.consumed_at !== null) {
+    const { error: scanError } = await service
+      .from('meal_scans')
+      .delete()
+      .eq('booking_id', booking!.id)
+    check(!scanError, scanError?.message)
+  }
+
+  const { error: updateError } = await service
+    .from('meal_bookings')
+    .update({ status: 'opted_in', consumed_at: null })
+    .eq('id', booking!.id)
+  check(!updateError, updateError?.message)
+
+  const { data: existingToken } = await service
+    .from('booking_tokens')
+    .select('token')
+    .eq('booking_id', booking!.id)
+    .maybeSingle()
+
+  let token = existingToken?.token
+  if (!token) {
+    const { data: createdToken, error: tokenError } = await service
+      .from('booking_tokens')
+      .insert({ booking_id: booking!.id })
+      .select('token')
+      .single()
+    check(!tokenError && createdToken, tokenError?.message)
+    token = createdToken!.token
+  }
+
+  check(token, 'expected a booking token')
+  return { bookingId: booking!.id, token: token! }
+}
+
+const validMealId = await openTodayMeal('dinner')
+const validPass = await ensureOptedInAndGetToken(validMealId)
+let validToken = validPass.token
+let validBookingId = validPass.bookingId
 await test('opted-in booking exposes a non-guessable token only to its owner', async () => {
   const { data: booking } = await studentBH1
     .from('meal_bookings')
     .select('id,status,consumed_at')
-    .eq('meal_id', futureMealId)
+    .eq('meal_id', validMealId)
     .single()
   check(booking?.status === 'opted_in', 'booking should be opted in')
-  validBookingId = booking!.id
+  check(booking!.id === validBookingId, 'expected the prepared booking')
 
   const { data, error } = await studentBH1.rpc('get_my_meal_pass', {
     p_booking_id: validBookingId,
@@ -268,6 +349,54 @@ await test('opted-in booking exposes a non-guessable token only to its owner', a
   check(!error, error?.message)
   check(typeof data.token === 'string' && data.token.length === 48, 'expected 48-char token')
   validToken = data.token
+})
+
+await test('a pass cannot be scanned before its meal service window', async () => {
+  const { data: meal } = await service
+    .from('meals')
+    .select('id')
+    .eq('mess_id', BH1)
+    .eq('meal_date', tomorrowDate)
+    .eq('category', 'lunch')
+    .single()
+  check(meal, 'expected tomorrow lunch')
+  const pass = await ensureOptedInAndGetToken(meal!.id)
+
+  const { data, error } = await staffBH1.rpc('scan_booking', { p_token: pass.token })
+  check(!error, error?.message)
+  check(data.result === 'not_started', `expected not_started, got ${data.result}`)
+  check(/opens at/i.test(data.message ?? ''), `unexpected message: ${data.message}`)
+
+  const { data: booking } = await service
+    .from('meal_bookings')
+    .select('consumed_at')
+    .eq('id', pass.bookingId)
+    .single()
+  check(booking!.consumed_at === null, 'early scan must not consume the booking')
+})
+
+await test('a pass cannot be scanned after its meal service window', async () => {
+  const { data: meal } = await service
+    .from('meals')
+    .select('id')
+    .eq('mess_id', BH1)
+    .eq('meal_date', yesterdayDate)
+    .eq('category', 'dinner')
+    .single()
+  check(meal, 'expected yesterday dinner')
+  const pass = await ensureOptedInAndGetToken(meal!.id)
+
+  const { data, error } = await staffBH1.rpc('scan_booking', { p_token: pass.token })
+  check(!error, error?.message)
+  check(data.result === 'meal_ended', `expected meal_ended, got ${data.result}`)
+  check(/ended at/i.test(data.message ?? ''), `unexpected message: ${data.message}`)
+
+  const { data: booking } = await service
+    .from('meal_bookings')
+    .select('consumed_at')
+    .eq('id', pass.bookingId)
+    .single()
+  check(booking!.consumed_at === null, 'late scan must not consume the booking')
 })
 
 await test('staff scans a valid pass and duplicate scans are rejected', async () => {
@@ -286,68 +415,29 @@ await test('staff scans a valid pass and duplicate scans are rejected', async ()
 })
 
 await test('concurrent duplicate scans produce exactly one valid result', async () => {
-  const { data: meal } = await studentBH1
-    .from('meals')
-    .select('id')
-    .eq('mess_id', BH1)
-    .eq('meal_date', tomorrowDate)
-    .eq('category', 'lunch')
-    .single()
-  const { data: booking } = await studentBH1
-    .from('meal_bookings')
-    .select('id,status,consumed_at')
-    .eq('meal_id', meal!.id)
-    .single()
-  if (booking!.status !== 'opted_in') {
-    const { error } = await studentBH1.rpc('set_my_booking_status', {
-      p_meal_id: meal!.id,
-      p_status: 'opted_in',
-    })
-    check(!error, error?.message)
-  }
-  const { data: pass } = await studentBH1.rpc('get_my_meal_pass', {
-    p_booking_id: booking!.id,
-  })
-  const token = pass.token as string
+  const mealId = await openTodayMeal('lunch')
+  const pass = await ensureOptedInAndGetToken(mealId)
   const [a, b] = await Promise.all([
-    staffBH1.rpc('scan_booking', { p_token: token }),
-    staffBH1.rpc('scan_booking', { p_token: token }),
+    staffBH1.rpc('scan_booking', { p_token: pass.token }),
+    staffBH1.rpc('scan_booking', { p_token: pass.token }),
   ])
   const results = [a.data?.result, b.data?.result].sort()
   check(JSON.stringify(results) === JSON.stringify(['already_scanned', 'valid']), `got ${results}`)
 })
 
 await test('an opted-out booking token is rejected', async () => {
-  const { data: meal } = await studentBH1
-    .from('meals')
-    .select('id')
-    .eq('mess_id', BH1)
-    .eq('meal_date', tomorrowDate)
-    .eq('category', 'snacks')
-    .single()
-  let { data: booking } = await studentBH1
+  const mealId = await openTodayMeal('snacks')
+  const pass = await ensureOptedInAndGetToken(mealId)
+
+  const { error: optOutError } = await service
     .from('meal_bookings')
-    .select('id,status')
-    .eq('meal_id', meal!.id)
-    .single()
-  if (booking!.status === 'opted_out') {
-    await studentBH1.rpc('set_my_booking_status', { p_meal_id: meal!.id, p_status: 'opted_in' })
-  }
-  const { error: optOutError } = await studentBH1.rpc('set_my_booking_status', {
-    p_meal_id: meal!.id,
-    p_status: 'opted_out',
-  })
+    .update({ status: 'opted_out' })
+    .eq('id', pass.bookingId)
   check(!optOutError, optOutError?.message)
-  const { data: tokens } = await studentBH1
-    .from('booking_tokens')
-    .select('token')
-    .eq('booking_id', booking!.id)
-    .single()
-  const { data, error } = await staffBH1.rpc('scan_booking', { p_token: tokens!.token })
+
+  const { data, error } = await staffBH1.rpc('scan_booking', { p_token: pass.token })
   check(!error, error?.message)
   check(data.result === 'opted_out', `expected opted_out, got ${data.result}`)
-
-  await studentBH1.rpc('set_my_booking_status', { p_meal_id: meal!.id, p_status: 'opted_in' })
 })
 
 await test('staff from another mess and unknown tokens are rejected', async () => {
@@ -380,30 +470,18 @@ await test('staff from another mess and unknown tokens are rejected', async () =
 })
 
 await test('manual roll-number fallback works and respects mess assignment', async () => {
-  const { data: meal } = await staffBH1
-    .from('meals')
-    .select('id')
-    .eq('mess_id', BH1)
-    .eq('meal_date', inThreeDaysDate)
-    .eq('category', 'breakfast')
-    .single()
-  const { data: booking } = await studentBH1
-    .from('meal_bookings')
-    .select('id,status,consumed_at')
-    .eq('meal_id', meal!.id)
-    .single()
-  if (booking!.status !== 'opted_in') {
-    await studentBH1.rpc('set_my_booking_status', { p_meal_id: meal!.id, p_status: 'opted_in' })
-  }
+  const mealId = await openTodayMeal('breakfast')
+  await ensureOptedInAndGetToken(mealId)
+
   const { data, error } = await staffBH1.rpc('scan_booking_manual', {
-    p_meal_id: meal!.id,
+    p_meal_id: mealId,
     p_roll_number: 'IIT2023001',
   })
   check(!error, error?.message)
   check(['valid', 'already_scanned'].includes(data.result), `unexpected ${data.result}`)
 
   const wrong = await staffBH4.rpc('scan_booking_manual', {
-    p_meal_id: meal!.id,
+    p_meal_id: mealId,
     p_roll_number: 'IIT2023001',
   })
   check(wrong.data.result === 'forbidden', `expected forbidden, got ${wrong.data.result}`)

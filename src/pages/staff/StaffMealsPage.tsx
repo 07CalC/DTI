@@ -47,9 +47,16 @@ function MealRow({ meal, totalStudents }: { meal: StaffMealListItem; totalStuden
                 {formatTimeRange(meal.start_time, meal.end_time)}
               </p>
             </div>
-            <Badge variant={closed ? 'muted' : 'success'}>
-              {closed ? 'Closed' : 'Open'}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              {meal.template_id && (
+                <Badge variant="outline" className="bg-card">
+                  Weekly
+                </Badge>
+              )}
+              <Badge variant={closed ? 'muted' : 'success'}>
+                {closed ? 'Closed' : 'Open'}
+              </Badge>
+            </div>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
@@ -150,11 +157,19 @@ export function StaffMealsPage() {
         title="Meals"
         description="Publish menus, tune timings, and review past service."
         action={
-          <Button asChild size="icon" className="shrink-0 rounded-2xl">
-            <Link to="/staff/meals/new" aria-label="Create meal">
-              <Plus className="size-5" />
-            </Link>
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="h-9">
+              <Link to="/staff/menu">
+                <CalendarDays className="size-3.5" />
+                Weekly menu
+              </Link>
+            </Button>
+            <Button asChild size="icon" className="shrink-0 rounded-2xl">
+              <Link to="/staff/meals/new" aria-label="Create meal">
+                <Plus className="size-5" />
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -216,11 +231,11 @@ export function StaffMealsPage() {
                 <EmptyState
                   icon={CalendarDays}
                   title="No upcoming meals"
-                  description="Publish your next meal and student bookings will be generated automatically."
+                  description="Set up your weekly menu once and meals will be generated automatically."
                   action={
                     <Button asChild size="sm">
-                      <Link to="/staff/meals/new">
-                        <Plus className="size-3.5" /> Create meal
+                      <Link to="/staff/menu">
+                        <CalendarDays className="size-3.5" /> Weekly menu
                       </Link>
                     </Button>
                   }

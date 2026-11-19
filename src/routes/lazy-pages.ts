@@ -31,6 +31,9 @@ export const StaffMealDetailPage = lazy(() =>
 export const StaffMealFormPage = lazy(() =>
   import('@/pages/staff/StaffMealFormPage').then((module) => ({ default: module.StaffMealFormPage })),
 )
+export const StaffMealPlanPage = lazy(() =>
+  import('@/pages/staff/StaffMealPlanPage').then((module) => ({ default: module.StaffMealPlanPage })),
+)
 export const StaffScannerPage = lazy(() =>
   import('@/pages/staff/StaffScannerPage').then((module) => ({ default: module.StaffScannerPage })),
 )

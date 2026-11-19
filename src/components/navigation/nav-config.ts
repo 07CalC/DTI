@@ -34,6 +34,7 @@ export const STAFF_NAV: NavItem[] = [
   { label: 'Dashboard', to: '/staff/dashboard', icon: LayoutDashboard },
   { label: 'Scanner', to: '/staff/scanner', icon: ScanLine },
   { label: 'Meals', to: '/staff/meals', icon: UtensilsCrossed },
+  { label: 'Menu', to: '/staff/menu', icon: CalendarDays },
   { label: 'Students', to: '/staff/students', icon: UsersRound },
 ]
 

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { todayIST } from '@/lib/utils'
+import { materializeRecurringMeals } from '@/services/meal-plans'
 import type {
   BookingHistoryItem,
   MealForStudent,
@@ -15,6 +16,13 @@ const STUDENT_MEAL_SELECT = `
 `
 
 export async function getUpcomingStudentMeals() {
+  // Keep each student's mess calendar topped up from the staff's weekly plan.
+  try {
+    await materializeRecurringMeals(null, 21)
+  } catch (error) {
+    console.warn('Could not generate recurring meals', error)
+  }
+
   const { data, error } = await supabase
     .from('meals')
     .select(STUDENT_MEAL_SELECT)

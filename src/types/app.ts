@@ -72,10 +72,33 @@ export interface MealRecord {
   start_time: string
   end_time: string
   booking_cutoff_at: string
+  template_id: string | null
   created_at: string
   updated_at: string
   mess: { id: string; name: string } | null
   menu_items: MenuItem[]
+}
+
+export interface MealTemplateItem {
+  id: string
+  name: string
+  description: string | null
+  sort_order: number
+}
+
+export interface MealTemplate {
+  id: string
+  mess_id: string
+  day_of_week: number
+  category: MealCategory
+  title: string
+  description: string | null
+  start_time: string
+  end_time: string
+  cutoff_offset_minutes: number
+  is_active: boolean
+  updated_at: string
+  menu_items: MealTemplateItem[]
 }
 
 export interface BookingHistoryItem {
@@ -186,6 +209,8 @@ export type ScanResultCode =
   | 'invalid'
   | 'forbidden'
   | 'not_booked'
+  | 'not_started'
+  | 'meal_ended'
 
 export interface ScanResult {
   result: ScanResultCode

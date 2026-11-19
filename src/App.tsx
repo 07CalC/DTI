@@ -20,6 +20,7 @@ import {
   StaffDashboardPage,
   StaffMealDetailPage,
   StaffMealFormPage,
+  StaffMealPlanPage,
   StaffMealsPage,
   StaffScannerPage,
   StaffStudentsPage,
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
             <Route path="/staff/scanner" element={<StaffScannerPage />} />
             <Route path="/staff/meals" element={<StaffMealsPage />} />
+            <Route path="/staff/menu" element={<StaffMealPlanPage />} />
             <Route path="/staff/meals/new" element={<StaffMealFormPage />} />
             <Route path="/staff/meals/:mealId" element={<StaffMealDetailPage />} />
             <Route path="/staff/meals/:mealId/edit" element={<StaffMealFormPage />} />

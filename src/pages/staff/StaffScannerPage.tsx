@@ -50,6 +50,18 @@ const RESULT_META: Record<
     icon: AlertTriangle,
     hint: 'This pass has already been used. Do not serve again.',
   },
+  not_started: {
+    title: 'Scanning not open yet',
+    tone: 'border-warning/30 bg-warning-soft text-warning',
+    icon: Clock3,
+    hint: 'This pass can only be scanned during the meal service window.',
+  },
+  meal_ended: {
+    title: 'Scanning window closed',
+    tone: 'border-destructive/25 bg-destructive/5 text-destructive',
+    icon: XCircle,
+    hint: 'The service window for this meal has ended.',
+  },
   opted_out: {
     title: 'Student opted out',
     tone: 'border-destructive/25 bg-destructive/5 text-destructive',

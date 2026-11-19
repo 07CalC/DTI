@@ -56,6 +56,11 @@ export function addDaysToIST(days: number, date = new Date()) {
   return todayIST(shifted)
 }
 
+/** ISO weekday in IST: 1 = Monday … 7 = Sunday. */
+export function weekdayIST(date = new Date()) {
+  return Number(formatInTimeZone(date, IST, 'i'))
+}
+
 export function relativeDayLabel(date: string) {
   const today = todayIST()
   if (date === today) return 'Today'
@@ -163,6 +168,31 @@ export const CATEGORY_META: Record<MealCategory, CategoryMeta> = {
 }
 
 export const CATEGORY_ORDER: MealCategory[] = ['breakfast', 'lunch', 'snacks', 'dinner']
+
+export const WEEKDAYS = [
+  { value: 1, label: 'Monday', shortLabel: 'Mon' },
+  { value: 2, label: 'Tuesday', shortLabel: 'Tue' },
+  { value: 3, label: 'Wednesday', shortLabel: 'Wed' },
+  { value: 4, label: 'Thursday', shortLabel: 'Thu' },
+  { value: 5, label: 'Friday', shortLabel: 'Fri' },
+  { value: 6, label: 'Saturday', shortLabel: 'Sat' },
+  { value: 7, label: 'Sunday', shortLabel: 'Sun' },
+] as const
+
+export function defaultCutoffOffset(category: MealCategory) {
+  const meta = CATEGORY_META[category]
+  const [startHour, startMinute] = meta.defaultStart.split(':').map(Number)
+  const [cutoffHour, cutoffMinute] = meta.defaultCutoff.split(':').map(Number)
+  return Math.max(0, startHour * 60 + startMinute - (cutoffHour * 60 + cutoffMinute))
+}
+
+export function formatCutoffHours(minutes: number) {
+  const hours = minutes / 60
+  const value = Number.isInteger(hours)
+    ? String(hours)
+    : hours.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+  return `${value} ${hours === 1 ? 'hour' : 'hours'}`
+}
 
 export function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`

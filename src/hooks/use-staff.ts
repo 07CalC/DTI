@@ -13,6 +13,13 @@ import {
   type MealSaveInput,
 } from '@/services/staff'
 import { errorMessage } from '@/lib/utils'
+import {
+  deleteMealTemplate,
+  getMealTemplates,
+  materializeRecurringMeals,
+  saveMealTemplate,
+  type MealTemplateSaveInput,
+} from '@/services/meal-plans'
 import type { ScanResult } from '@/types/app'
 
 export function useStaffMeals(scope: 'today' | 'upcoming' | 'past') {
@@ -54,6 +61,58 @@ export function useMessStudentCounts() {
     queryFn: () => getStudentCountsByMess(messIds),
     enabled: messIds.length > 0,
     staleTime: 30_000,
+  })
+}
+
+export function useMealTemplates() {
+  const { me } = useAuth()
+  const messIds = me?.staff_messes.map((mess) => mess.id) ?? []
+  return useQuery({
+    queryKey: ['meal-templates', messIds],
+    queryFn: () => getMealTemplates(messIds),
+    enabled: messIds.length > 0,
+    staleTime: 30_000,
+  })
+}
+
+function invalidateMealViews(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['meal-templates'] })
+  queryClient.invalidateQueries({ queryKey: ['staff-meals'] })
+  queryClient.invalidateQueries({ queryKey: ['staff-meal'] })
+  queryClient.invalidateQueries({ queryKey: ['student-meals'] })
+  queryClient.invalidateQueries({ queryKey: ['admin-overview'] })
+  queryClient.invalidateQueries({ queryKey: ['mess-detail'] })
+}
+
+export function useSaveMealTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: MealTemplateSaveInput) => {
+      const templateId = await saveMealTemplate(input)
+      // Apply the updated plan to upcoming meals immediately.
+      await materializeRecurringMeals([input.mess_id], 21, true)
+      return templateId
+    },
+    onSuccess: () => {
+      invalidateMealViews(queryClient)
+      toast.success('Weekly menu saved and upcoming meals updated')
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  })
+}
+
+export function useDeleteMealTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ templateId, messId }: { templateId: string; messId: string }) => {
+      await deleteMealTemplate(templateId)
+      await materializeRecurringMeals([messId], 21, true)
+    },
+    onSuccess: () => {
+      invalidateMealViews(queryClient)
+      toast.success('Removed from the weekly plan')
+    },
+    onError: (error) => toast.error(errorMessage(error)),
   })
 }
 

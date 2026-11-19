@@ -121,16 +121,62 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"meals": {
+                },"meal_template_items": {
                   Row: {
-                    "booking_cutoff_at": string,"category": Database["public"]['Enums']["meal_category"],"created_at": string,"created_by": string | null,"description": string | null,"end_time": string,"id": string,"meal_date": string,"mess_id": string,"start_time": string,"title": string,"updated_at": string
+                    "created_at": string,"description": string | null,"id": string,"name": string,"sort_order": number,"template_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "booking_cutoff_at": string,"category": Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time": string,"id"?: string,"meal_date": string,"mess_id": string,"start_time": string,"title": string,"updated_at"?: string
+                    "created_at"?: string,"description"?: string | null,"id"?: string,"name": string,"sort_order"?: number,"template_id": string
                   }
                   Update: {
-                    "booking_cutoff_at"?: string,"category"?: Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string,"id"?: string,"meal_date"?: string,"mess_id"?: string,"start_time"?: string,"title"?: string,"updated_at"?: string
+                    "created_at"?: string,"description"?: string | null,"id"?: string,"name"?: string,"sort_order"?: number,"template_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "meal_template_items_template_id_fkey"
+      columns: ["template_id"]
+isOneToOne: false
+      referencedRelation: "meal_templates"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"meal_templates": {
+                  Row: {
+                    "category": Database["public"]['Enums']["meal_category"],"created_at": string,"created_by": string | null,"cutoff_offset_minutes": number,"day_of_week": number,"description": string | null,"end_time": string,"id": string,"is_active": boolean,"mess_id": string,"start_time": string,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "category": Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"cutoff_offset_minutes"?: number,"day_of_week": number,"description"?: string | null,"end_time": string,"id"?: string,"is_active"?: boolean,"mess_id": string,"start_time": string,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "category"?: Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"cutoff_offset_minutes"?: number,"day_of_week"?: number,"description"?: string | null,"end_time"?: string,"id"?: string,"is_active"?: boolean,"mess_id"?: string,"start_time"?: string,"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "meal_templates_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "meal_templates_mess_id_fkey"
+      columns: ["mess_id"]
+isOneToOne: false
+      referencedRelation: "messes"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"meals": {
+                  Row: {
+                    "booking_cutoff_at": string,"category": Database["public"]['Enums']["meal_category"],"created_at": string,"created_by": string | null,"description": string | null,"end_time": string,"id": string,"meal_date": string,"mess_id": string,"start_time": string,"template_id": string | null,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "booking_cutoff_at": string,"category": Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time": string,"id"?: string,"meal_date": string,"mess_id": string,"start_time": string,"template_id"?: string | null,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "booking_cutoff_at"?: string,"category"?: Database["public"]['Enums']["meal_category"],"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"end_time"?: string,"id"?: string,"meal_date"?: string,"mess_id"?: string,"start_time"?: string,"template_id"?: string | null,"title"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -144,6 +190,12 @@ isOneToOne: false
       columns: ["mess_id"]
 isOneToOne: false
       referencedRelation: "messes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "meals_template_id_fkey"
+      columns: ["template_id"]
+isOneToOne: false
+      referencedRelation: "meal_templates"
       referencedColumns: ["id"]
     }
                   ]
@@ -302,6 +354,9 @@ isOneToOne: true
                            },
 "is_staff_for":
 { Args: { "p_mess_id": string }; Returns: boolean
+                           },
+"materialize_recurring_meals":
+{ Args: { "p_days"?: number,"p_mess_ids"?: (string)[],"p_refresh"?: boolean }; Returns: number
                            },
 "my_student_mess_id":
 { Args: Record<PropertyKey, never>; Returns: string

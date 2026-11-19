@@ -29,6 +29,8 @@ Supabase Auth ── JWT ──► Postgres
 | `staff_assignments` | Many-to-many staff ↔ mess assignment. A staff member can operate multiple messes. |
 | `meals` | Menu title, category, date, service window, booking cutoff, owning mess, creator. |
 | `menu_items` | Ordered menu lines for a meal. |
+| `meal_templates` | Weekly repeating menu definition: mess, ISO weekday, category, service window, cutoff offset, active flag. |
+| `meal_template_items` | Ordered menu lines for a weekly template. |
 | `meal_bookings` | One row per student/meal with current `status`, immutable `initial_status`, and `consumed_at`. |
 | `booking_tokens` | Random QR secret, one row per booking, kept separate from bookings. |
 | `booking_events` | Append-only status transition log with source and actor. |
@@ -83,6 +85,19 @@ Bookings are created for **future** meals using the student's default preference
 - All inserts use `on conflict (student_id, meal_id) do nothing`, so re-running is safe.
 
 Historical meals are not auto-filled, because they are no longer bookable. The demo seed explicitly creates past bookings to exercise history/reporting.
+
+### Weekly menu materialization
+
+Staff set a repeating `meal_templates` row per mess × ISO weekday × category, with an ordered item list.
+
+- `materialize_recurring_meals(p_mess_ids, p_days, p_refresh)` fills the next 21 days by default.
+- It only writes messes the caller belongs to (admin, assigned staff, or the student's own mess).
+- Missing meals are inserted with `template_id` set, then the existing meal trigger creates student bookings.
+- `p_refresh = true` is used after a template is saved. It updates only future meals still linked to the same template.
+- Editing a generated meal from the normal meal form clears `template_id`, turning that date into a one-off override.
+- Meals whose service has already started today are never created or rewritten.
+
+The staff and student clients call the materialization function opportunistically when loading menus, so no separate cron worker is required.
 
 ### Student changes before cutoff
 
@@ -152,10 +167,12 @@ Triggers fall back to `system` when those settings are absent. Events are never 
 1. Resolves the caller's profile and rejects non-staff/non-admin roles.
 2. Looks up the token and its meal's mess.
 3. Verifies the caller is assigned to that mess (admins bypass assignment).
-4. Delegates to `_consume_booking()`, which locks the booking row.
-5. Returns a structured result: `valid`, `already_scanned`, `opted_out`, `invalid`, or `forbidden`.
+4. Delegates to `_consume_booking()`, which locks the booking row and checks the meal's service window.
+5. Returns a structured result: `valid`, `already_scanned`, `not_started`, `meal_ended`, `opted_out`, `invalid`, or `forbidden`.
 
-`_consume_booking()` only updates when:
+The service window is computed in `Asia/Kolkata` from `meal_date + start_time` through `meal_date + end_time`. A pass scanned before the start returns `not_started`; a pass scanned at or after the end returns `meal_ended`. Neither result consumes the booking. The message includes the meal date and opening/closing time so the scanner can explain the rejection.
+
+`_consume_booking()` only updates when the current instant is inside the service window and:
 
 ```sql
 consumed_at is null and status = 'opted_in'
@@ -200,7 +217,7 @@ Sensitive tables have **no insert/update/delete policies** for normal clients:
 
 Those changes happen only through RPCs owned by the function definer.
 
-`profiles`, `messes`, `students`, `staff_assignments`, `meals`, and `menu_items` have admin/staff write policies as appropriate, but the primary management flows still use RPCs so related side effects are consistent.
+`profiles`, `messes`, `students`, `staff_assignments`, `meals`, `menu_items`, `meal_templates`, and `meal_template_items` have admin/staff write policies as appropriate, but the primary management flows still use RPCs so related side effects are consistent.
 
 ## 8. RPC catalog
 
@@ -216,6 +233,7 @@ Those changes happen only through RPCs owned by the function definer.
 - `scan_booking(p_token)`
 - `scan_booking_manual(p_meal_id, p_roll_number)`
 - `_consume_booking(p_booking_id, p_actor)` — internal shared routine
+- `materialize_recurring_meals(p_mess_ids, p_days, p_refresh)` — generate/update meals from the weekly plan
 
 **Admin**
 
@@ -236,6 +254,7 @@ Every admin RPC checks `is_admin()` inside the database. Hiding admin routes in 
 - `booking_cutoff_at` is a `timestamptz` computed from the meal date/time in `Asia/Kolkata`.
 - The database compares `now()` against `booking_cutoff_at`; the client may show a countdown but cannot bypass the check.
 - The meal constraint prevents a cutoff after service starts.
+- Scanning is only allowed between the meal's `start_time` and `end_time`; the database checks this before consuming the booking.
 - Reports use `date` ranges, not client-supplied timestamps.
 
 ## 10. Reporting and rebates
@@ -259,6 +278,8 @@ Applied in order:
 1. `20261118000100_schema.sql` — enums, tables, indexes, helper functions, auth trigger, booking generation, transfer/deactivation triggers, event log, token creation, meal protection.
 2. `20261118000200_rpc.sql` — student, scan, admin, import, and report RPCs.
 3. `20261118000300_rls.sql` — RLS policies and table grants.
+4. `20261119000100_recurring_meals.sql` — weekly templates, template RLS, generated-meal linkage, and materialization RPC.
+5. `20261119000200_scan_service_window.sql` — service-window enforcement for QR and manual scans.
 
 `supabase/seed.sql` is loaded only by `supabase db reset` locally. Production uses migrations plus admin provisioning.
 
@@ -268,6 +289,6 @@ Applied in order:
 - Never update or delete historical `booking_events`.
 - Never rewrite `initial_status` on an existing booking.
 - Never trust a client-supplied role, mess ID, cutoff, or scan result.
-- Keep the cutoff check and consumption `UPDATE` inside the database.
+- Keep the cutoff check, service-window check, and consumption `UPDATE` inside the database.
 - Keep transfers additive: cancel future old-mess bookings, create new-mess ones, leave history intact.
 - Keep report output factual; rebate policy belongs outside the schema.

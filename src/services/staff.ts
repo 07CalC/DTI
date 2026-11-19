@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { todayIST } from '@/lib/utils'
+import { materializeRecurringMeals } from '@/services/meal-plans'
 import type {
   BookingStatus,
   MealCategory,
@@ -23,7 +24,7 @@ export interface MealSaveInput {
 
 const MEAL_LIST_SELECT = `
   id, mess_id, category, title, description, meal_date, start_time, end_time,
-  booking_cutoff_at, created_at, updated_at,
+  booking_cutoff_at, template_id, created_at, updated_at,
   mess:messes(id,name),
   menu_items(id,name,description,sort_order),
   meal_bookings(id,status,consumed_at,initial_status,created_at,updated_at,student_id)
@@ -31,7 +32,7 @@ const MEAL_LIST_SELECT = `
 
 const MEAL_WITH_STUDENTS_SELECT = `
   id, mess_id, category, title, description, meal_date, start_time, end_time,
-  booking_cutoff_at, created_at, updated_at,
+  booking_cutoff_at, template_id, created_at, updated_at,
   mess:messes(id,name),
   menu_items(id,name,description,sort_order),
   meal_bookings(
@@ -62,6 +63,17 @@ export type StaffMealDetail = MealRecord & {
 
 export async function getStaffMeals(messIds: string[], scope: 'today' | 'upcoming' | 'past') {
   if (messIds.length === 0) return []
+
+  // The upcoming view is the staff app's main entry point. Use it to fill in
+  // any missing meals from the weekly plan before reading the calendar.
+  if (scope === 'upcoming') {
+    try {
+      await materializeRecurringMeals(messIds, 21)
+    } catch (error) {
+      console.warn('Could not generate recurring meals', error)
+    }
+  }
+
   let query = supabase.from('meals').select(MEAL_LIST_SELECT).in('mess_id', messIds)
 
   if (scope === 'today') query = query.eq('meal_date', todayIST())
@@ -130,6 +142,9 @@ export async function saveMeal(input: MealSaveInput, mealId?: string) {
         start_time: input.start_time,
         end_time: input.end_time,
         booking_cutoff_at: input.booking_cutoff_at,
+        // Editing a generated meal turns it into a one-off override so the
+        // weekly plan will not overwrite the change on its next sync.
+        template_id: null,
       })
       .eq('id', mealId)
       .select('id')

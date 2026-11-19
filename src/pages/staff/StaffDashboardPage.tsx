@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
-  Plus,
   QrCode,
   ScanLine,
   Timer,
@@ -175,13 +175,13 @@ export function StaffDashboardPage() {
           <span className="text-[10px] font-semibold">Scan pass</span>
         </Link>
         <Link
-          to="/staff/meals/new"
+          to="/staff/menu"
           className="flex flex-col items-center gap-1.5 rounded-2xl border border-border/70 bg-card py-3 text-center shadow-card"
         >
           <span className="flex size-9 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-            <Plus className="size-4" />
+            <CalendarDays className="size-4" />
           </span>
-          <span className="text-[10px] font-semibold">Create meal</span>
+          <span className="text-[10px] font-semibold">Weekly menu</span>
         </Link>
         <Link
           to="/staff/students"
@@ -226,8 +226,8 @@ export function StaffDashboardPage() {
                   description="Create today's meals or check the upcoming schedule."
                   action={
                     <Button asChild size="sm">
-                      <Link to="/staff/meals/new">
-                        <Plus className="size-3.5" /> Create meal
+                      <Link to="/staff/menu">
+                        <CalendarDays className="size-3.5" /> Weekly menu
                       </Link>
                     </Button>
                   }

@@ -57,6 +57,39 @@ export const mealSchema = z
 
 export type MealFormValues = z.infer<typeof mealSchema>
 
+export const mealPlanSchema = z
+  .object({
+    category: z.enum(['breakfast', 'lunch', 'snacks', 'dinner']),
+    title: z.string().trim().min(2, 'Add a meal title'),
+    description: z.string().trim().optional(),
+    start_time: z.string().min(1, 'Start time is required'),
+    end_time: z.string().min(1, 'End time is required'),
+    cutoff_offset_hours: z
+      .number({ message: 'Enter hours before service' })
+      .min(0, 'Cannot be negative')
+      .max(24, 'Keep the cutoff within 24 hours'),
+    is_active: z.boolean(),
+    menu_items: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1, 'Menu item name is required'),
+          description: z.string().trim().optional(),
+        }),
+      )
+      .min(1, 'Add at least one menu item'),
+  })
+  .superRefine((values, ctx) => {
+    if (values.end_time <= values.start_time) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['end_time'],
+        message: 'End time must be after start time',
+      })
+    }
+  })
+
+export type MealPlanFormValues = z.infer<typeof mealPlanSchema>
+
 export const studentSchema = z.object({
   name: z.string().trim().min(2, 'Full name is required'),
   email: iiitaEmail,
